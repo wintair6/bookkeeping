@@ -7,6 +7,9 @@ const path = require('path');
 const errorHandler = require('./middleware/errorHandler');
 
 function createApp() {
+  if (!process.env.SESSION_SECRET) throw new Error('SESSION_SECRET env var is required');
+  if (!process.env.ENCRYPTION_KEY) throw new Error('ENCRYPTION_KEY env var is required');
+
   const app = express();
 
   app.use(helmet({
@@ -23,7 +26,7 @@ function createApp() {
   app.use(express.static(path.join(__dirname, '../public')));
 
   app.use(session({
-    store: new SQLiteStore({ db: 'sessions.db', dir: '.' }),
+    store: new SQLiteStore({ db: 'sessions.db', dir: path.join(__dirname, '..') }),
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,

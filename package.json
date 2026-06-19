@@ -11,6 +11,9 @@
     "test": "jest --forceExit",
     "seed": "node scripts/seed.js"
   },
+  "engines": {
+    "node": ">=22"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
