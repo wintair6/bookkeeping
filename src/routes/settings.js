@@ -40,4 +40,41 @@ router.patch('/api/settings', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+const { getOAuthClient } = require('../jobs/gmailPoller');
+
+const GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
+
+router.get('/api/auth/gmail', requireAuth, (req, res) => {
+  const auth = getOAuthClient();
+  const url = auth.generateAuthUrl({ access_type: 'offline', scope: GMAIL_SCOPES, prompt: 'consent' });
+  res.redirect(url);
+});
+
+router.get('/api/auth/gmail/callback', requireAuth, async (req, res, next) => {
+  try {
+    const { code } = req.query;
+    const auth = getOAuthClient();
+    const { tokens } = await auth.getToken(code);
+    const db = getDb();
+    db.prepare(`
+      INSERT INTO settings(key, encrypted_value, updated_at) VALUES('gmail_oauth_tokens', ?, datetime('now'))
+      ON CONFLICT(key) DO UPDATE SET encrypted_value=excluded.encrypted_value, updated_at=excluded.updated_at
+    `).run(encrypt(JSON.stringify(tokens)));
+    res.redirect('/?view=settings&gmail=connected');
+  } catch (err) { next(err); }
+});
+
+router.post('/api/auth/gmail/disconnect', requireAuth, (req, res) => {
+  getDb().prepare(`DELETE FROM settings WHERE key='gmail_oauth_tokens'`).run();
+  res.json({ ok: true });
+});
+
+router.post('/api/auth/gmail/poll', requireAuth, async (req, res, next) => {
+  try {
+    const { pollGmail } = require('../jobs/gmailPoller');
+    await pollGmail(getDb());
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

@@ -3,10 +3,12 @@ const { createApp } = require('./app');
 const { getDb } = require('./db/connection');
 const { startFolderWatcher } = require('./jobs/folderWatcher');
 const { startPipeline } = require('./jobs/pipeline');
+const { startGmailPoller } = require('./jobs/gmailPoller');
 
 const db = getDb();
 startFolderWatcher(db);
 startPipeline(db);
+startGmailPoller(db);
 
 const app = createApp();
 const port = process.env.PORT || 3000;
