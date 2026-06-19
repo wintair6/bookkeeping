@@ -78,7 +78,11 @@ router.post('/api/invoices/:id/upload', requireAuth, async (req, res, next) => {
       `).run(match.transactionId, invoice.id);
       db.prepare(`INSERT INTO processing_log(invoice_id, from_status, to_status, detail) VALUES(?,?,?,?)`)
         .run(invoice.id, 'uploaded', 'reconciliation_proposed', 'auto-matched by reconciler');
-    }).catch(console.error);
+    }).catch(err => {
+      console.error(err);
+      db.prepare(`INSERT INTO processing_log(invoice_id, from_status, to_status, detail) VALUES(?,?,?,?)`)
+        .run(invoice.id, 'uploaded', 'uploaded', `reconciliation match failed: ${err.message}`);
+    });
 
     res.json({ ok: true, voucherId });
   } catch (err) { next(err); }

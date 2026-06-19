@@ -23,11 +23,11 @@
           <div style="margin-bottom:12px;color:var(--text-muted);font-size:12px">EXTRACTION (${(inv.confidence_score*100).toFixed(0)}% confidence)</div>
           <label style="display:block;margin-bottom:8px">
             <span style="font-size:12px;color:var(--text-muted)">Invoice Date</span>
-            <input id="date-${inv.id}" type="date" value="${inv.invoice_date || ''}" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;margin-top:4px;display:block">
+            <input id="date-${inv.id}" type="date" value="${esc(inv.invoice_date) || ''}" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;margin-top:4px;display:block">
           </label>
           <label style="display:block;margin-bottom:8px">
             <span style="font-size:12px;color:var(--text-muted)">Company</span>
-            <input id="company-${inv.id}" type="text" value="${inv.company_name || ''}" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;margin-top:4px;display:block">
+            <input id="company-${inv.id}" type="text" value="${esc(inv.company_name) || ''}" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;margin-top:4px;display:block">
           </label>
           <label style="display:block;margin-bottom:8px">
             <span style="font-size:12px;color:var(--text-muted)">VAT Rate</span>

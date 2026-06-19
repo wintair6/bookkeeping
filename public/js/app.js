@@ -1,4 +1,19 @@
+// XSS escaping helper
+window.esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
 const views = { queue: 'view-queue', review: 'view-review', reconciliation: 'view-reconciliation', settings: 'view-settings' };
+
+function showApp() {
+  document.getElementById('view-login').style.display = 'none';
+  document.getElementById('sidebar').style.display = '';
+  document.getElementById('main').style.display = '';
+}
+
+function showLogin() {
+  document.getElementById('view-login').style.display = 'flex';
+  document.getElementById('sidebar').style.display = 'none';
+  document.getElementById('main').style.display = 'none';
+}
 
 function navigate(view) {
   Object.values(views).forEach(id => document.getElementById(id).style.display = 'none');
@@ -29,6 +44,10 @@ window.api = async function(method, path, body) {
     headers: body ? { 'Content-Type': 'application/json' } : {},
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (res.status === 401) {
+    showLogin();
+    throw new Error('Nicht authentifiziert — bitte anmelden.');
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error?.message || `HTTP ${res.status}`);
@@ -36,4 +55,59 @@ window.api = async function(method, path, body) {
   return res.json();
 };
 
-navigate('queue');
+window.doLogin = async function() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  const btn = document.getElementById('login-btn');
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = '…';
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      errEl.textContent = data.error?.message || 'Anmeldung fehlgeschlagen.';
+      errEl.style.display = 'block';
+      return;
+    }
+    showApp();
+    navigate('queue');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Anmelden';
+  }
+};
+
+// Allow pressing Enter in the password field to submit
+document.getElementById('login-password').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+window.doLogout = async function() {
+  await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+  showLogin();
+};
+
+// Boot: check authentication before showing the app
+(async function boot() {
+  // Hide app chrome while checking
+  document.getElementById('sidebar').style.display = 'none';
+  document.getElementById('main').style.display = 'none';
+  try {
+    await fetch('/api/auth/me').then(async res => {
+      if (res.ok) {
+        showApp();
+        navigate('queue');
+      } else {
+        showLogin();
+      }
+    });
+  } catch (_) {
+    showLogin();
+  }
+})();

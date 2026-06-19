@@ -23,16 +23,16 @@
 
     const rows = data.map(inv => `
       <tr>
-        <td>${inv.renamed_filename || inv.original_filename}</td>
-        <td>${inv.company_name || '—'}</td>
-        <td>${inv.invoice_date || '—'}</td>
+        <td>${esc(inv.renamed_filename || inv.original_filename)}</td>
+        <td>${esc(inv.company_name) || '—'}</td>
+        <td>${esc(inv.invoice_date) || '—'}</td>
         <td>${inv.vat_rate ? inv.vat_rate + '%' : '—'}</td>
         <td>${inv.amount_gross != null ? '€' + inv.amount_gross.toFixed(2) : '—'}</td>
-        <td><span class="badge badge-${inv.status}">${inv.status.replace('_', ' ')}</span></td>
+        <td><span class="badge badge-${esc(inv.status)}">${esc(inv.status).replace('_', ' ')}</span></td>
         <td>
           ${inv.status === 'failed' ? `<button class="btn btn-sm btn-secondary" onclick="retryInvoice(${inv.id})">Retry</button>` : ''}
           ${inv.status === 'ready' ? `<button class="btn btn-sm btn-primary" onclick="uploadInvoice(${inv.id})">Upload</button>` : ''}
-          ${inv.error_message ? `<span style="color:var(--red);font-size:11px" title="${inv.error_message}">&#9888; error</span>` : ''}
+          ${inv.error_message ? `<span style="color:var(--red);font-size:11px" title="${esc(inv.error_message)}">&#9888; error</span>` : ''}
         </td>
       </tr>
     `).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:32px">No invoices</td></tr>`;
