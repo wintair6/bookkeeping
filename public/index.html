@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Lexware Bookkeeping</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <div id="sidebar">
+    <div class="logo">Buchführung</div>
+    <nav>
+      <a href="#queue" class="nav-link active">Queue</a>
+      <a href="#review" class="nav-link">Prüfen</a>
+      <a href="#reconciliation" class="nav-link">Abstimmen</a>
+      <a href="#settings" class="nav-link">Einstellungen</a>
+    </nav>
+  </div>
+  <div id="main">
+    <div id="gmail-error-banner"></div>
+    <div id="view-queue"></div>
+    <div id="view-review" style="display:none"></div>
+    <div id="view-reconciliation" style="display:none"></div>
+    <div id="view-settings" style="display:none"></div>
+  </div>
+  <div id="toast"></div>
+  <script src="/js/app.js"></script>
+  <script src="/js/queue.js"></script>
+  <script src="/js/review.js"></script>
+  <script src="/js/reconciliation.js"></script>
+  <script src="/js/settings.js"></script>
+</body>
+</html>
