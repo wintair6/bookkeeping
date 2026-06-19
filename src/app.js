@@ -34,7 +34,7 @@ function createApp() {
   }));
 
   app.use(require('./routes/health'));
-  // Additional routes registered in later tasks
+  app.use(require('./routes/settings'));
 
   const bcrypt = require('bcryptjs');
   const { getDb } = require('./db/connection');
