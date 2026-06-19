@@ -59,6 +59,8 @@ router.post('/api/invoices/:id/upload', requireAuth, async (req, res, next) => {
     // Move file to processed/
     const folderRow = db.prepare(`SELECT encrypted_value FROM settings WHERE key='drop_folder_path'`).get();
     if (folderRow?.encrypted_value) {
+      const processedDir = path.join(folderRow.encrypted_value, 'processed');
+      fs.mkdirSync(processedDir, { recursive: true });
       const dest = path.join(folderRow.encrypted_value, 'processed', invoice.renamed_filename || path.basename(invoice.file_path));
       fs.renameSync(invoice.file_path, dest);
       db.prepare(`UPDATE invoices SET file_path=? WHERE id=?`).run(dest, invoice.id);
@@ -68,11 +70,14 @@ router.post('/api/invoices/:id/upload', requireAuth, async (req, res, next) => {
     db.prepare(`INSERT INTO processing_log(invoice_id, from_status, to_status) VALUES(?,?,?)`).run(invoice.id, invoice.status, 'uploaded');
 
     // Kick off reconciliation in background (fire and forget)
-    findMatch(invoice, db).then(match => {
+    const updatedInvoice = { ...invoice, lexware_voucher_id: voucherId };
+    findMatch(updatedInvoice, db).then(match => {
       if (!match) return;
       db.prepare(`
         UPDATE invoices SET status='reconciliation_proposed', lexware_transaction_id=?, updated_at=datetime('now') WHERE id=?
       `).run(match.transactionId, invoice.id);
+      db.prepare(`INSERT INTO processing_log(invoice_id, from_status, to_status, detail) VALUES(?,?,?,?)`)
+        .run(invoice.id, 'uploaded', 'reconciliation_proposed', 'auto-matched by reconciler');
     }).catch(console.error);
 
     res.json({ ok: true, voucherId });
@@ -97,6 +102,8 @@ router.post('/api/invoices/:id/reconcile', requireAuth, async (req, res, next) =
 // Reject proposed match
 router.post('/api/invoices/:id/reject-match', requireAuth, (req, res) => {
   const db = getDb();
+  const inv = db.prepare(`SELECT id FROM invoices WHERE id=?`).get(req.params.id);
+  if (!inv) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Invoice not found', details: null } });
   db.prepare(`UPDATE invoices SET status='uploaded', lexware_transaction_id=NULL, updated_at=datetime('now') WHERE id=?`).run(req.params.id);
   db.prepare(`INSERT INTO processing_log(invoice_id, from_status, to_status, detail) VALUES(?,?,?,?)`).run(req.params.id, 'reconciliation_proposed', 'uploaded', 'match rejected by user');
   res.json({ ok: true });
@@ -105,6 +112,8 @@ router.post('/api/invoices/:id/reject-match', requireAuth, (req, res) => {
 // Retry failed
 router.post('/api/invoices/:id/retry', requireAuth, (req, res) => {
   const db = getDb();
+  const inv = db.prepare(`SELECT id FROM invoices WHERE id=?`).get(req.params.id);
+  if (!inv) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Invoice not found', details: null } });
   db.prepare(`UPDATE invoices SET status='pending', error_message=NULL, updated_at=datetime('now') WHERE id=?`).run(req.params.id);
   db.prepare(`INSERT INTO processing_log(invoice_id, from_status, to_status, detail) VALUES(?,?,?,?)`).run(req.params.id, 'failed', 'pending', 'manual retry');
   res.json({ ok: true });
