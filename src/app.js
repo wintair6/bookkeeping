@@ -35,6 +35,7 @@ function createApp() {
 
   app.use(require('./routes/health'));
   app.use(require('./routes/settings'));
+  app.use(require('./routes/invoices'));
 
   const bcrypt = require('bcryptjs');
   const { getDb } = require('./db/connection');
