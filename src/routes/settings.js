@@ -3,8 +3,8 @@ const { requireAuth } = require('../middleware/auth');
 const { encrypt, decrypt } = require('../services/encryptor');
 const { getDb } = require('../db/connection');
 
-const MASKED_KEYS = ['lexware_api_key', 'claude_api_key', 'gmail_oauth_tokens'];
-const PLAIN_KEYS  = ['confidence_threshold', 'drop_folder_path', 'gmail_filter'];
+const MASKED_KEYS = ['lexware_api_key', 'claude_api_key', 'gmail_app_password'];
+const PLAIN_KEYS  = ['confidence_threshold', 'drop_folder_path', 'gmail_filter', 'gmail_email', 'gmail_connection_status'];
 
 function maskValue(key, raw) {
   if (!raw) return '';
@@ -40,50 +40,18 @@ router.patch('/api/settings', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-const { getOAuthClient } = require('../jobs/gmailPoller');
-
-const GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
-
-router.get('/api/auth/gmail', requireAuth, (req, res) => {
-  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-    return res.redirect('/?gmail_error=missing_credentials');
-  }
-  const auth = getOAuthClient();
-  const url = auth.generateAuthUrl({ access_type: 'offline', scope: GMAIL_SCOPES, prompt: 'consent' });
-  res.redirect(url);
-});
-
-// No requireAuth here — Safari's ITP drops session cookies on cross-site redirects
-// We verify authenticity via the stored session after redirect
-router.get('/api/auth/gmail/callback', async (req, res, next) => {
+router.post('/api/settings/gmail/test', requireAuth, async (req, res) => {
   try {
-    if (req.query.error) {
-      return res.redirect(`/?gmail_error=${encodeURIComponent(req.query.error)}`);
-    }
-    const { code } = req.query;
-    if (!code) return res.redirect('/?gmail_error=missing_code');
-    const auth = getOAuthClient();
-    const { tokens } = await auth.getToken(code);
-    const db = getDb();
-    db.prepare(`
-      INSERT INTO settings(key, encrypted_value, updated_at) VALUES('gmail_oauth_tokens', ?, datetime('now'))
-      ON CONFLICT(key) DO UPDATE SET encrypted_value=excluded.encrypted_value, updated_at=excluded.updated_at
-    `).run(encrypt(JSON.stringify(tokens)));
-    res.redirect('/?view=settings&gmail=connected');
-  } catch (err) { next(err); }
-});
-
-router.post('/api/auth/gmail/disconnect', requireAuth, (req, res) => {
-  getDb().prepare(`DELETE FROM settings WHERE key='gmail_oauth_tokens'`).run();
-  res.json({ ok: true });
-});
-
-router.post('/api/auth/gmail/poll', requireAuth, async (req, res, next) => {
-  try {
-    const { pollGmail } = require('../jobs/gmailPoller');
-    await pollGmail(getDb());
+    const { testConnection } = require('../jobs/gmailPoller');
+    await testConnection(getDb());
+    getDb().prepare(`
+      INSERT INTO settings(key, encrypted_value, updated_at) VALUES('gmail_connection_status', 'connected', datetime('now'))
+      ON CONFLICT(key) DO UPDATE SET encrypted_value='connected', updated_at=excluded.updated_at
+    `).run();
     res.json({ ok: true });
-  } catch (err) { next(err); }
+  } catch (err) {
+    res.status(400).json({ error: { code: 'GMAIL_CONNECTION_FAILED', message: err.message, details: null } });
+  }
 });
 
 module.exports = router;

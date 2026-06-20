@@ -1,15 +1,36 @@
 const cron = require('node-cron');
 const path = require('path');
 const fs = require('fs');
-const { google } = require('googleapis');
-const { decrypt, encrypt } = require('../services/encryptor');
+const { ImapFlow } = require('imapflow');
+const { simpleParser } = require('mailparser');
+const { decrypt } = require('../services/encryptor');
 
-function getOAuthClient() {
-  return new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI || `http://localhost:${process.env.PORT || 4400}/api/auth/gmail/callback`
-  );
+async function getImapCredentials(db) {
+  const emailRow = db.prepare(`SELECT encrypted_value FROM settings WHERE key='gmail_email'`).get();
+  const passRow  = db.prepare(`SELECT encrypted_value FROM settings WHERE key='gmail_app_password'`).get();
+  if (!emailRow?.encrypted_value || !passRow?.encrypted_value) return null;
+  return {
+    email: emailRow.encrypted_value,
+    password: decrypt(passRow.encrypted_value),
+  };
+}
+
+function makeClient(email, password) {
+  return new ImapFlow({
+    host: 'imap.gmail.com',
+    port: 993,
+    secure: true,
+    auth: { user: email, pass: password },
+    logger: false,
+  });
+}
+
+async function testConnection(db) {
+  const creds = await getImapCredentials(db);
+  if (!creds) throw new Error('Keine Zugangsdaten konfiguriert');
+  const client = makeClient(creds.email, creds.password);
+  await client.connect();
+  await client.logout();
 }
 
 async function pollGmail(db) {
@@ -18,29 +39,8 @@ async function pollGmail(db) {
   ).run().lastInsertRowid;
 
   try {
-    const tokenRow = db.prepare(`SELECT encrypted_value FROM settings WHERE key='gmail_oauth_tokens'`).get();
-    if (!tokenRow) throw new Error('Gmail not connected — no OAuth tokens');
-
-    const tokens = JSON.parse(decrypt(tokenRow.encrypted_value));
-    const auth = getOAuthClient();
-    auth.setCredentials(tokens);
-
-    // Auto-refresh tokens
-    auth.on('tokens', newTokens => {
-      const merged = { ...tokens, ...newTokens };
-      db.prepare(`
-        INSERT INTO settings(key, encrypted_value, updated_at) VALUES('gmail_oauth_tokens', ?, datetime('now'))
-        ON CONFLICT(key) DO UPDATE SET encrypted_value=excluded.encrypted_value, updated_at=excluded.updated_at
-      `).run(encrypt(JSON.stringify(merged)));
-    });
-
-    const gmail = google.gmail({ version: 'v1', auth });
-    const filterRow = db.prepare(`SELECT encrypted_value FROM settings WHERE key='gmail_filter'`).get();
-    const q = filterRow?.encrypted_value || 'has:attachment filename:pdf';
-
-    const listRes = await gmail.users.messages.list({ userId: 'me', q, maxResults: 50 });
-    const messages = listRes.data.messages || [];
-    let attachmentsFound = 0;
+    const creds = await getImapCredentials(db);
+    if (!creds) throw new Error('Gmail nicht konfiguriert — E-Mail und App-Passwort fehlen');
 
     const folderRow = db.prepare(`SELECT encrypted_value FROM settings WHERE key='drop_folder_path'`).get();
     const dropFolder = folderRow?.encrypted_value;
@@ -48,37 +48,54 @@ async function pollGmail(db) {
     const inboxDir = path.join(dropFolder, 'inbox');
     fs.mkdirSync(inboxDir, { recursive: true });
 
-    for (const msg of messages) {
-      const existing = db.prepare(`SELECT id FROM invoices WHERE gmail_message_id=?`).get(msg.id);
+    const client = makeClient(creds.email, creds.password);
+    await client.connect();
+
+    let emailsScanned = 0;
+    let attachmentsFound = 0;
+
+    await client.mailboxOpen('INBOX');
+
+    // Search for emails with PDF attachments not yet seen
+    for await (const msg of client.fetch('1:*', { envelope: true, bodyStructure: true, uid: true })) {
+      emailsScanned++;
+      const uid = String(msg.uid);
+
+      const existing = db.prepare(`SELECT id FROM invoices WHERE gmail_message_id=?`).get(uid);
       if (existing) continue;
 
-      const full = await gmail.users.messages.get({ userId: 'me', id: msg.id });
-      const parts = full.data.payload?.parts || [];
+      // Check if message has PDF attachments
+      const hasPdf = hasPdfAttachment(msg.bodyStructure);
+      if (!hasPdf) continue;
 
-      for (const part of parts) {
-        if (part.mimeType !== 'application/pdf' && !part.filename?.endsWith('.pdf')) continue;
-        const attId = part.body?.attachmentId;
-        if (!attId) continue;
+      // Fetch full message to parse attachments
+      const { content } = await client.download(msg.uid, undefined, { uid: true });
+      const chunks = [];
+      for await (const chunk of content) chunks.push(chunk);
+      const raw = Buffer.concat(chunks);
+      const parsed = await simpleParser(raw);
 
-        const att = await gmail.users.messages.attachments.get({ userId: 'me', messageId: msg.id, id: attId });
-        const data = Buffer.from(att.data.data, 'base64url');
-        const filename = part.filename || `gmail-${msg.id}.pdf`;
+      for (const att of (parsed.attachments || [])) {
+        if (!att.filename?.toLowerCase().endsWith('.pdf') && att.contentType !== 'application/pdf') continue;
+        const filename = att.filename || `gmail-${uid}.pdf`;
         const filePath = path.join(inboxDir, filename);
-        fs.writeFileSync(filePath, data);
+        fs.writeFileSync(filePath, att.content);
 
         db.prepare(`
           INSERT INTO invoices(source, original_filename, file_path, gmail_message_id, status)
           VALUES('gmail', ?, ?, ?, 'pending')
           ON CONFLICT(gmail_message_id) DO NOTHING
-        `).run(filename, filePath, msg.id);
+        `).run(filename, filePath, uid);
         attachmentsFound++;
       }
     }
 
+    await client.logout();
+
     db.prepare(`
       UPDATE gmail_poll_runs SET completed_at=datetime('now'), emails_scanned=?, attachments_found=? WHERE id=?
-    `).run(messages.length, attachmentsFound, runId);
-    console.log(`[gmailPoller] scanned ${messages.length} emails, found ${attachmentsFound} attachments`);
+    `).run(emailsScanned, attachmentsFound, runId);
+    console.log(`[gmailPoller] scanned ${emailsScanned} emails, found ${attachmentsFound} PDF attachments`);
   } catch (err) {
     db.prepare(`
       UPDATE gmail_poll_runs SET completed_at=datetime('now'), error=? WHERE id=?
@@ -87,9 +104,20 @@ async function pollGmail(db) {
   }
 }
 
+function hasPdfAttachment(structure) {
+  if (!structure) return false;
+  if (structure.type === 'attachment' &&
+      (structure.disposition?.filename?.toLowerCase().endsWith('.pdf') ||
+       structure.parameters?.name?.toLowerCase().endsWith('.pdf'))) return true;
+  if (Array.isArray(structure.childNodes)) {
+    return structure.childNodes.some(hasPdfAttachment);
+  }
+  return false;
+}
+
 function startGmailPoller(db) {
-  cron.schedule('0 * * * *', () => pollGmail(db)); // top of every hour
+  cron.schedule('0 * * * *', () => pollGmail(db));
   console.log('[gmailPoller] scheduled — runs every 60 min');
 }
 
-module.exports = { startGmailPoller, pollGmail, getOAuthClient };
+module.exports = { startGmailPoller, pollGmail, testConnection };
