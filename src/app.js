@@ -13,6 +13,9 @@ function createApp() {
   const app = express();
 
   app.use(helmet({
+    // HSTS disabled: tool runs on HTTP-only localhost, HSTS would force Safari
+    // to use HTTPS permanently (365 days) breaking all CSS/JS loading
+    strictTransportSecurity: false,
     contentSecurityPolicy: {
       useDefaults: false,
       directives: {
