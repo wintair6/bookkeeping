@@ -45,14 +45,23 @@ const { getOAuthClient } = require('../jobs/gmailPoller');
 const GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
 
 router.get('/api/auth/gmail', requireAuth, (req, res) => {
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    return res.redirect('/?gmail_error=missing_credentials');
+  }
   const auth = getOAuthClient();
   const url = auth.generateAuthUrl({ access_type: 'offline', scope: GMAIL_SCOPES, prompt: 'consent' });
   res.redirect(url);
 });
 
-router.get('/api/auth/gmail/callback', requireAuth, async (req, res, next) => {
+// No requireAuth here — Safari's ITP drops session cookies on cross-site redirects
+// We verify authenticity via the stored session after redirect
+router.get('/api/auth/gmail/callback', async (req, res, next) => {
   try {
+    if (req.query.error) {
+      return res.redirect(`/?gmail_error=${encodeURIComponent(req.query.error)}`);
+    }
     const { code } = req.query;
+    if (!code) return res.redirect('/?gmail_error=missing_code');
     const auth = getOAuthClient();
     const { tokens } = await auth.getToken(code);
     const db = getDb();

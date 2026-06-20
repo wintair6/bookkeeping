@@ -99,14 +99,22 @@ document.getElementById('login-password').addEventListener('keydown', e => {
 
 // Boot: check authentication before showing the app
 (async function boot() {
-  // Hide app chrome while checking
   document.getElementById('sidebar').style.display = 'none';
   document.getElementById('main').style.display = 'none';
   try {
     await fetch('/api/auth/me').then(async res => {
       if (res.ok) {
         showApp();
-        navigate('queue');
+        const params = new URLSearchParams(window.location.search);
+        const view = params.get('view') || 'queue';
+        navigate(view);
+        const gmailError = params.get('gmail_error');
+        if (gmailError === 'missing_credentials') {
+          setTimeout(() => showToast('Gmail-Verbindung fehlgeschlagen: GOOGLE_CLIENT_ID und GOOGLE_CLIENT_SECRET fehlen in der .env Datei.', 'error'), 300);
+        } else if (gmailError) {
+          setTimeout(() => showToast('Gmail-Fehler: ' + gmailError, 'error'), 300);
+        }
+        history.replaceState({}, '', '/');
       } else {
         showLogin();
       }
