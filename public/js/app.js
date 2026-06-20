@@ -55,7 +55,7 @@ window.api = async function(method, path, body) {
   return res.json();
 };
 
-window.doLogin = async function() {
+async function doLogin() {
   const email = document.getElementById('login-email').value.trim();
   const password = document.getElementById('login-password').value;
   const errEl = document.getElementById('login-error');
@@ -77,21 +77,25 @@ window.doLogin = async function() {
     }
     showApp();
     navigate('queue');
+  } catch (err) {
+    errEl.textContent = err.message || 'Verbindungsfehler.';
+    errEl.style.display = 'block';
   } finally {
     btn.disabled = false;
     btn.textContent = 'Anmelden';
   }
-};
+}
 
-// Allow pressing Enter in the password field to submit
+async function doLogout() {
+  await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+  showLogin();
+}
+
+document.getElementById('login-btn').addEventListener('click', doLogin);
+document.getElementById('logout-btn').addEventListener('click', doLogout);
 document.getElementById('login-password').addEventListener('keydown', e => {
   if (e.key === 'Enter') doLogin();
 });
-
-window.doLogout = async function() {
-  await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
-  showLogin();
-};
 
 // Boot: check authentication before showing the app
 (async function boot() {

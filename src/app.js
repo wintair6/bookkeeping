@@ -14,11 +14,18 @@ function createApp() {
 
   app.use(helmet({
     contentSecurityPolicy: {
+      useDefaults: false,
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'", "'unsafe-inline'", 'cdnjs.cloudflare.com'],
+        scriptSrcAttr: ["'unsafe-inline'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'self'"],
+        imgSrc: ["'self'", 'data:'],
+        fontSrc: ["'self'", 'https:', 'data:'],
       },
     },
   }));
@@ -39,6 +46,13 @@ function createApp() {
 
   const bcrypt = require('bcryptjs');
   const { getDb } = require('./db/connection');
+
+  app.get('/api/auth/me', (req, res) => {
+    if (!req.session.userId) return res.status(401).json({ error: { code: 'UNAUTHENTICATED', message: 'Not authenticated', details: null } });
+    const user = getDb().prepare('SELECT id, email FROM users WHERE id=?').get(req.session.userId);
+    if (!user) return res.status(401).json({ error: { code: 'UNAUTHENTICATED', message: 'Session invalid', details: null } });
+    res.json({ user: { email: user.email } });
+  });
 
   app.post('/api/auth/login', async (req, res, next) => {
     try {

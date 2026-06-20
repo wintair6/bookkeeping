@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
-  <div id="view-login" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center">
+  <div id="view-login" style="display:flex;position:fixed;top:0;right:0;bottom:0;left:0;background:var(--bg);z-index:9999;align-items:center;justify-content:center">
     <div style="width:360px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:40px">
       <div style="font-size:20px;font-weight:700;color:var(--accent);margin-bottom:8px">Buchführung</div>
       <div style="color:var(--text-muted);font-size:13px;margin-bottom:28px">Bitte anmelden, um fortzufahren.</div>
@@ -22,7 +22,7 @@
           style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:14px">
       </label>
       <div id="login-error" style="display:none;color:var(--red);font-size:12px;margin-bottom:16px"></div>
-      <button id="login-btn" class="btn btn-primary" style="width:100%;justify-content:center;padding:10px" onclick="doLogin()">Anmelden</button>
+      <button id="login-btn" class="btn btn-primary" style="width:100%;justify-content:center;padding:10px">Anmelden</button>
     </div>
   </div>
   <div id="sidebar">
@@ -34,7 +34,7 @@
       <a href="#settings" class="nav-link">Einstellungen</a>
     </nav>
     <div style="margin-top:auto;padding:16px">
-      <button class="btn btn-secondary btn-sm" style="width:100%;justify-content:center" onclick="doLogout()">Abmelden</button>
+      <button id="logout-btn" class="btn btn-secondary btn-sm" style="width:100%;justify-content:center">Abmelden</button>
     </div>
   </div>
   <div id="main">
