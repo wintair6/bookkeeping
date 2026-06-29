@@ -72,6 +72,27 @@
           <button class="btn btn-primary btn-sm" onclick="saveConfig()">Speichern</button>
         </section>
 
+        <section style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:16px">
+          <h2 style="font-size:15px;margin-bottom:16px">Passwort ändern</h2>
+          <label style="display:block;margin-bottom:12px">
+            <span style="font-size:12px;color:var(--text-muted)">Aktuelles Passwort</span>
+            <input id="pw-current" type="password" autocomplete="current-password"
+              style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;margin-top:4px;display:block">
+          </label>
+          <label style="display:block;margin-bottom:12px">
+            <span style="font-size:12px;color:var(--text-muted)">Neues Passwort</span>
+            <input id="pw-new" type="password" autocomplete="new-password"
+              style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;margin-top:4px;display:block">
+          </label>
+          <label style="display:block;margin-bottom:16px">
+            <span style="font-size:12px;color:var(--text-muted)">Neues Passwort wiederholen</span>
+            <input id="pw-confirm" type="password" autocomplete="new-password"
+              style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;margin-top:4px;display:block">
+          </label>
+          <div id="pw-error" style="display:none;color:var(--red);font-size:12px;margin-bottom:12px"></div>
+          <button class="btn btn-primary btn-sm" onclick="changePassword()">Passwort ändern</button>
+        </section>
+
       </div>
     `;
   };
@@ -116,6 +137,29 @@
     if (!Object.keys(body).length) return showToast('Keine Änderungen', 'error');
     try { await api('PATCH', '/api/settings', body); showToast('API Keys gespeichert'); }
     catch (e) { showToast(e.message, 'error'); }
+  };
+
+  window.changePassword = async function() {
+    const current = document.getElementById('pw-current').value;
+    const next = document.getElementById('pw-new').value;
+    const confirm = document.getElementById('pw-confirm').value;
+    const errEl = document.getElementById('pw-error');
+    errEl.style.display = 'none';
+
+    if (!current || !next || !confirm) { errEl.textContent = 'Alle Felder ausfüllen.'; errEl.style.display = 'block'; return; }
+    if (next.length < 8) { errEl.textContent = 'Neues Passwort muss mindestens 8 Zeichen haben.'; errEl.style.display = 'block'; return; }
+    if (next !== confirm) { errEl.textContent = 'Passwörter stimmen nicht überein.'; errEl.style.display = 'block'; return; }
+
+    try {
+      await api('POST', '/api/auth/change-password', { currentPassword: current, newPassword: next });
+      document.getElementById('pw-current').value = '';
+      document.getElementById('pw-new').value = '';
+      document.getElementById('pw-confirm').value = '';
+      showToast('Passwort erfolgreich geändert');
+    } catch (e) {
+      errEl.textContent = e.message;
+      errEl.style.display = 'block';
+    }
   };
 
   window.saveConfig = async function() {

@@ -70,6 +70,23 @@ function createApp() {
     } catch (err) { next(err); }
   });
 
+  app.post('/api/auth/change-password', async (req, res, next) => {
+    try {
+      if (!req.session.userId) return res.status(401).json({ error: { code: 'UNAUTHENTICATED', message: 'Not authenticated', details: null } });
+      const { currentPassword, newPassword } = req.body;
+      if (!currentPassword || !newPassword) return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'currentPassword and newPassword required', details: null } });
+      if (newPassword.length < 8) return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'Neues Passwort muss mindestens 8 Zeichen haben', details: null } });
+      const db = getDb();
+      const user = db.prepare('SELECT * FROM users WHERE id=?').get(req.session.userId);
+      if (!user || !(await bcrypt.compare(currentPassword, user.password_hash))) {
+        return res.status(401).json({ error: { code: 'INVALID_CREDENTIALS', message: 'Aktuelles Passwort falsch', details: null } });
+      }
+      const newHash = await bcrypt.hash(newPassword, 12);
+      db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(newHash, user.id);
+      res.json({ ok: true });
+    } catch (err) { next(err); }
+  });
+
   app.post('/api/auth/logout', (req, res) => {
     req.session.destroy(() => res.json({ ok: true }));
   });
