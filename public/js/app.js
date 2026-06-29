@@ -96,6 +96,10 @@ document.getElementById('logout-btn').addEventListener('click', doLogout);
 document.getElementById('login-password').addEventListener('keydown', e => {
   if (e.key === 'Enter') doLogin();
 });
+document.getElementById('forgot-btn').addEventListener('click', () => {
+  const info = document.getElementById('forgot-info');
+  info.style.display = info.style.display === 'none' ? 'block' : 'none';
+});
 
 // Boot: check authentication before showing the app
 (async function boot() {
